@@ -4,6 +4,9 @@
 			<Tabs as="div" v-model="portal_tabs" :tabs="[
 				{
 					label: 'Appointments',
+				},
+				{
+					label: 'Diagnostics',
 				}
 			]">
 				<template #tab-panel="{ tab }">
@@ -19,18 +22,18 @@
 								</template>
 							</Button>
 						</div>
-						<div class="space-y-2">
+						<div class="py-4 relative min-h-[75vh] flex flex-col">
 							<!-- Appointment Grid -->
 							<div
+								v-if="paginatedAppointments.length"
 								class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 p-2
-										max-h-[75vh] overflow-y-auto
-										lg:max-h-none lg:overflow-visible"
-								>
+									max-h-[75vh] overflow-y-auto lg:max-h-none lg:overflow-visible">
 								<Card
-									v-for="item in paginatedAppointments" :key="item.name"
-									class="cursor-pointer rounded-xl shadow-sm border border-gray-200
-										hover:shadow-md hover:scale-105 transition-transform duration-200
-										p-4 bg-white min-w-0"
+									v-for="item in paginatedAppointments"
+									:key="item.name"
+									class="cursor-pointer rounded-xl border border-gray-200 transition-transform
+										hover:scale-105 duration-200 hover:drop-shadow-md p-4 bg-white
+										min-w-0 !shadow-none drop-shadow-xl"
 									@click="appointmentDetails(item)">
 									<div class="flex items-center justify-between whitespace-nowrap">
 										<h3 class="text-xs font-medium text-gray-500 truncate">{{ item.name }}</h3>
@@ -55,8 +58,17 @@
 								</Card>
 							</div>
 
+							<div
+								v-else
+								class="flex flex-col items-center justify-center flex-grow text-center p-6"
+							>
+								<FeatherIcon name="file-text" class="w-12 h-12 text-gray-400 mb-3" />
+								<h2 class="text-lg font-semibold text-gray-700">No Records Found</h2>
+								<p class="text-sm text-gray-500">Looks like you don't have any appointments yet.</p>
+							</div>
+
 							<!-- Pagination -->
-							<div class="flex justify-center items-center space-x-2">
+							<div v-if="paginatedAppointments.length" class="flex justify-center items-center space-x-2 mt-auto pt-2">
 								<Button variant="subtle" :disabled="currentPage === 1" @click="currentPage--">
 									Prev
 								</Button>
@@ -70,6 +82,9 @@
 								</Button>
 							</div>
 						</div>
+					</div>
+					<div v-if="tab.label == 'Diagnostics'">
+						<DiagnosticModel />
 					</div>
 				</template>
 			</Tabs>
@@ -190,6 +205,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import BookAppointmentModel from '@/components/BookAppointmentModel.vue'
+import DiagnosticModel from '@/components/DiagnosticModel.vue'
 import { formatCurrency } from "@/utils/formatters"
 
 import {
@@ -253,19 +269,54 @@ function appointmentDetails(appointment) {
 }
 
 function print(doctype, docname) {
+	let get_print_format = createResource({
+		url: "/api/method/healthcare.healthcare.api.patient_portal.get_print_format",
+		method: "POST",
+		makeParams() {
+			return {
+				doctype: doctype,
+				name: docname
+			}
+		},
+		onSuccess(response) {
+			if (response) {
+				const with_letterhead = response.letter_head ? 1 : 0;
+				const print_format = response.print_format;
+				const doc_names = JSON.stringify([docname,]);
+				const letterhead = response.letter_head;
+
+				let pdf_options = JSON.stringify({
+					"page-size": "A4",
+					"margin-top": "60mm",
+					"margin-bottom": "60mm",
+					"margin-left": "5mm",
+					"margin-right": "5mm",
+				});
+
 	const w = window.open(
-		"/api/method/healthcare.healthcare.api.patient_portal.secure_print_pdf"
-		+ "?doctype=" + encodeURIComponent(doctype)
-		+ "&name=" + docname
-		+ "&no_letterhead=0"
+					"/api/method/frappe.utils.print_format.download_multi_pdf?" +
+						"doctype=" +
+						encodeURIComponent(doctype) +
+						"&name=" +
+						encodeURIComponent(doc_names) +
+						"&format=" +
+						encodeURIComponent(print_format) +
+						"&no_letterhead=" +
+						(with_letterhead ? "0" : "1") +
+						"&letterhead=" +
+						encodeURIComponent(letterhead) +
+						"&options=" +
+						encodeURIComponent(pdf_options)
 	);
 
 	if (!w) {
-		alert_dialog.value = true;
-		dialog_title = "Please enable pop-ups";
-		dialog_message = "Please enable pop-ups of your browser to print boarding pass";
+					alert("Please enable pop-ups");
 		return;
 	}
+			}
+		}
+	});
+	get_print_format.fetch();
 }
 
 function formatDate(dateStr) {
