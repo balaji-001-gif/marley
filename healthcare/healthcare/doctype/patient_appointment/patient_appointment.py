@@ -15,6 +15,7 @@ from frappe.utils import flt, format_date, get_link_to_form, get_time, getdate
 
 from erpnext.setup.doctype.employee.employee import is_holiday
 
+from healthcare.healthcare.api.patient_portal import update_payment_record
 from healthcare.healthcare.doctype.fee_validity.fee_validity import (
 	check_fee_validity,
 	get_fee_validity,
@@ -53,6 +54,10 @@ class PatientAppointment(Document):
 			or not self.practitioner
 		):
 			update_fee_validity(self)
+
+	def on_payment_authorized(self, payment_status):
+		if payment_status in ["Authorized", "Completed"]:
+			update_payment_record("Patient Appointment", self.name)
 
 	def after_insert(self):
 		self.update_prescription_details()

@@ -2,16 +2,16 @@
 // For license information, please see license.txt
 
 frappe.ui.form.on('Healthcare Settings', {
-	setup: function(frm) {
-		frm.set_query('default_google_calendar', function(doc) {
+	setup: function (frm) {
+		frm.set_query('default_google_calendar', function (doc) {
 			return {
 				filters: {
 					'enable': true
 				}
 			};
 		});
-		frm.set_query('account', 'receivable_account', function(doc, cdt, cdn) {
-			var d  = locals[cdt][cdn];
+		frm.set_query('account', 'receivable_account', function (doc, cdt, cdn) {
+			var d = locals[cdt][cdn];
 			return {
 				filters: {
 					'account_type': 'Receivable',
@@ -20,8 +20,8 @@ frappe.ui.form.on('Healthcare Settings', {
 				}
 			};
 		});
-		frm.set_query('account', 'income_account', function(doc, cdt, cdn) {
-			var d  = locals[cdt][cdn];
+		frm.set_query('account', 'income_account', function (doc, cdt, cdn) {
+			var d = locals[cdt][cdn];
 			return {
 				filters: {
 					'root_type': 'Income',
@@ -30,7 +30,7 @@ frappe.ui.form.on('Healthcare Settings', {
 				}
 			};
 		});
-		frm.set_query('default_code_system', function(doc) {
+		frm.set_query('default_code_system', function (doc) {
 			return {
 				filters: {
 					'is_fhir_defined': false
@@ -57,11 +57,41 @@ frappe.ui.form.on('Healthcare Settings', {
 		set_query_service_item(frm, 'op_consulting_charge_item');
 		set_query_service_item(frm, 'clinical_procedure_consumable_item');
 		set_query_service_item(frm, 'registration_item');
-	}
+
+		frappe.call({
+			method: "healthcare.healthcare.doctype.healthcare_settings.healthcare_settings.check_payments_app",
+			callback: (data) => {
+				if (!data.message) {
+					frm.set_df_property("payment_section", "hidden", 1);
+					if (frm.doc.collect_payment) {
+						frm.set_value("collect_payment", 0);
+						frm.save();
+					}
+					frm.set_df_property("collect_payment", "read_only", 1);
+					frm.trigger("set_no_payments_app_html");
+				} else {
+					frm.set_df_property("no_payments_app", "hidden", 1);
+					frm.set_df_property("collect_payment", "read_only", 0);
+				}
+			},
+		});
+	},
+
+	set_no_payments_app_html(frm) {
+		frm.get_field("payments_app_is_not_installed").html(`
+				<div class="alert alert-warning">
+					Please install the
+					<a target="_blank" style="text-decoration: underline; color: var(--alert-text-warning); background: var(--alert-bg-warning);" href="https://frappecloud.com/marketplace/apps/payments">Payments app</a>
+					 to enable payment gateway. Refer to the
+					 <a target="_blank" style="text-decoration: underline; color: var(--alert-text-warning); background: var(--alert-bg-warning);" href="https://docs.frappe.io/learning/setting-up-payment-gateway">Documentation</a>
+					 for more information.
+				</div>
+			`);
+	},
 });
 
-var set_query_service_item = function(frm, service_item_field) {
-	frm.set_query(service_item_field, function() {
+var set_query_service_item = function (frm, service_item_field) {
+	frm.set_query(service_item_field, function () {
 		return {
 			filters: {
 				'is_sales_item': 1,
