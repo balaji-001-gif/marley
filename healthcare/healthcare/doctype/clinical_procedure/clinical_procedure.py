@@ -58,7 +58,9 @@ class ClinicalProcedure(Document):
 			return
 
 		if not self.start_date or not self.start_time:
-			d, t = frappe.db.get_value("Patient Appointment", self.appointment, ["date", "time"])
+			d, t = frappe.db.get_value(
+				"Patient Appointment", self.appointment, ["appointment_date", "appointment_time"]
+			)
 			self.start_date = d
 			self.start_time = t
 
@@ -142,44 +144,49 @@ class ClinicalProcedure(Document):
 			consumable_total_amount = 0
 			consumption_details = False
 			customer = frappe.db.get_value("Patient", self.patient, "customer")
-			if customer:
-				for item in self.items:
-					if item.invoice_separately_as_consumables:
-						price_list, price_list_currency = frappe.db.get_values(
-							"Price List", {"selling": 1}, ["name", "currency"]
-						)[0]
-						args = {
-							"doctype": "Sales Invoice",
-							"item_code": item.item_code,
-							"company": self.company,
-							"warehouse": self.warehouse,
-							"customer": customer,
-							"selling_price_list": price_list,
-							"price_list_currency": price_list_currency,
-							"plc_conversion_rate": 1.0,
-							"conversion_rate": 1.0,
-						}
-						item_details = get_item_details(args)
-						item_price = item_details.price_list_rate * item.qty
-						item_consumption_details = (
-							item_details.item_name + " " + str(item.qty) + " " + item.uom + " " + str(item_price)
-						)
-						consumable_total_amount += item_price
-						if not consumption_details:
-							consumption_details = _("Clinical Procedure ({0}):").format(self.name)
-						consumption_details += "\n\t" + item_consumption_details
-
-				if consumable_total_amount > 0:
-					frappe.db.set_value(
-						"Clinical Procedure", self.name, "consumable_total_amount", consumable_total_amount
-					)
-					frappe.db.set_value(
-						"Clinical Procedure", self.name, "consumption_details", consumption_details
-					)
-			else:
+			if not customer:
 				frappe.throw(
 					_("Please set Customer in Patient {0}").format(frappe.bold(self.patient)),
 					title=_("Customer Not Found"),
+				)
+
+			price_list_details = frappe.db.get_values("Price List", {"selling": 1}, ["name", "currency"])
+			if not price_list_details:
+				frappe.throw(
+					_("Please create a Selling Price List"),
+					title=_("Price List Not Found"),
+				)
+			price_list, price_list_currency = price_list_details[0]
+
+			for item in self.items:
+				if item.invoice_separately_as_consumables:
+					args = {
+						"doctype": "Sales Invoice",
+						"item_code": item.item_code,
+						"company": self.company,
+						"warehouse": self.warehouse,
+						"customer": customer,
+						"selling_price_list": price_list,
+						"price_list_currency": price_list_currency,
+						"plc_conversion_rate": 1.0,
+						"conversion_rate": 1.0,
+					}
+					item_details = get_item_details(args)
+					item_price = item_details.price_list_rate * item.qty
+					item_consumption_details = (
+						item_details.item_name + " " + str(item.qty) + " " + item.uom + " " + str(item_price)
+					)
+					consumable_total_amount += item_price
+					if not consumption_details:
+						consumption_details = _("Clinical Procedure ({0}):").format(self.name)
+					consumption_details += "\n\t" + item_consumption_details
+
+			if consumable_total_amount > 0:
+				frappe.db.set_value(
+					"Clinical Procedure", self.name, "consumable_total_amount", consumable_total_amount
+				)
+				frappe.db.set_value(
+					"Clinical Procedure", self.name, "consumption_details", consumption_details
 				)
 
 		self.db_set(
