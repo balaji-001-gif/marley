@@ -15,19 +15,18 @@ test_dependencies = ["Item"]
 
 
 class TestClinicalProcedure(FrappeTestCase):
-	def test_procedure_template_item(self):
-		patient, practitioner = create_healthcare_docs()
+	def test_disable_procedure_template_item(self):
 		procedure_template = create_clinical_procedure_template()
 		self.assertTrue(frappe.db.exists("Item", procedure_template.item))
 
-		procedure_template.disabled = 1
+		procedure_template.disabled = True
 		procedure_template.save()
 		self.assertEqual(frappe.db.get_value("Item", procedure_template.item, "disabled"), 1)
 
 	def test_consumables(self):
 		patient, practitioner = create_healthcare_docs()
 		procedure_template = create_clinical_procedure_template()
-		procedure_template.allow_stock_consumption = 1
+		procedure_template.consume_stock = True
 		consumable = create_consumable()
 		procedure_template.append(
 			"items",
@@ -49,6 +48,26 @@ class TestClinicalProcedure(FrappeTestCase):
 		# check consumption
 		self.assertTrue(frappe.db.exists("Stock Entry", result))
 
+	def test_start_and_end_time(self):
+		# check planned end time is calculated
+		# check start and complete sets actual start / end times
+		procedure_template = create_clinical_procedure_template()
+		procedure_template.default_duration = 3600
+		procedure_template.consume_stock = False
+		procedure_template.save()
+		patient, practitioner = create_healthcare_docs()
+
+		procedure = create_procedure(procedure_template, patient, practitioner)
+		self.assertTrue(procedure.planned_end_datetime)
+
+		procedure.start_procedure()
+		self.assertEqual(procedure.status, "In Progress")
+		self.assertTrue(procedure.actual_start_datetime)
+
+		procedure.complete_procedure()
+		self.assertEqual(procedure.status, "Completed")
+		self.assertTrue(procedure.actual_end_datetime)
+
 
 def create_consumable():
 	if frappe.db.exists("Item", "Syringe"):
@@ -67,9 +86,11 @@ def create_procedure(procedure_template, patient, practitioner):
 	procedure.procedure_template = procedure_template.name
 	procedure.patient = patient
 	procedure.practitioner = practitioner
-	procedure.consume_stock = procedure_template.allow_stock_consumption
+	procedure.consume_stock = procedure_template.consume_stock
 	procedure.items = procedure_template.items
 	procedure.company = "_Test Company"
 	procedure.warehouse = "_Test Warehouse - _TC"
+	procedure.start_date = frappe.utils.getdate()
+	procedure.start_time = frappe.utils.nowtime()
 	procedure.submit()
 	return procedure
