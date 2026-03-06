@@ -51,7 +51,11 @@ class ServiceRequestController(Document):
 	def set_patient_age(self):
 		patient = frappe.get_doc("Patient", self.patient)
 		self.patient_age_data = patient.get_age()
-		self.patient_age = dateutil.relativedelta.relativedelta(getdate(), getdate(patient.dob))
+		if patient.dob:
+			age = dateutil.relativedelta.relativedelta(getdate(), getdate(patient.dob))
+			self.patient_age = age.years
+		else:
+			self.patient_age = 0
 
 	def set_medication_qty(self):
 		if not self.doctype == "Medication Request":

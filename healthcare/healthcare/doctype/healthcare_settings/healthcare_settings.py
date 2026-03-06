@@ -115,7 +115,7 @@ def check_payments_app():
 			"doctype_or_field": "DocField",
 			"doc_type": "Healthcare Settings",
 			"field_name": "payment_gateway",
-	}
+		}
 		if frappe.db.exists("Property Setter", filters):
 			return True
 

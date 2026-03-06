@@ -135,10 +135,6 @@ def make_clinical_procedure(service_request):
 	doc.medical_department = service_request.medical_department
 	doc.invoiced = 1 if service_request.billing_status == "Invoiced" else 0
 
-	doc.insurance_policy = service_request.insurance_policy
-	doc.insurance_payor = service_request.insurance_payor
-	doc.insurance_coverage = service_request.insurance_coverage
-	doc.coverage_status = service_request.coverage_status
 	doc.consume_stock = procedure_template.consume_stock
 	doc.warehouse = frappe.db.get_single_value("Stock Settings", "default_warehouse")
 
@@ -190,11 +186,6 @@ def make_lab_test(service_request):
 	doc.date = service_request.occurrence_date
 	doc.time = service_request.occurrence_time
 	doc.invoiced = 1 if service_request.billing_status == "Invoiced" else 0
-
-	doc.insurance_policy = service_request.insurance_policy
-	doc.insurance_payor = service_request.insurance_payor
-	doc.insurance_coverage = service_request.insurance_coverage
-	doc.coverage_status = service_request.coverage_status
 
 	return doc
 
