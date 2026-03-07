@@ -143,6 +143,19 @@
 						<h2 class="text-xl font-semibold text-gray-800">Payment Successful</h2>
 						<p class="text-gray-600">Your appointment with {{ selectedPractitioner.practitioner_name }} has been confirmed.</p>
 					</div>
+
+					<!-- No Data State -->
+					<div 
+						v-if="!success && !booked && !show_calendar && !show_practitioners && departments.length === 0" 
+						class="flex flex-col items-center justify-center h-full text-center space-y-4 animate-fade-in"
+					>
+						<FeatherIcon name="info" class="text-gray-400 w-16 h-16" />
+						<h3 class="text-lg font-medium text-gray-700">No Departments Available</h3>
+						<p class="text-gray-500 max-w-xs mx-auto">
+							It seems there are no departments set up for online booking. 
+							Please contact the hospital administration.
+						</p>
+					</div>
 				</div>
 				<div class="min-h-[10px]">
 					<ErrorMessage v-if="error" :message="error" />
