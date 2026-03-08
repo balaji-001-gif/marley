@@ -52,12 +52,17 @@ def get_appointments():
 
 @frappe.whitelist()
 def get_logged_in_patient():
-	patient = frappe.db.exists("Patient", {"status": "Active", "user_id": frappe.session.user})
+	patient = frappe.db.exists(
+		"Patient", {"status": "Active", "user_id": frappe.session.user}, ignore_permissions=True
+	)
 
 	if not patient:
 		return None
 
-	return {"value": patient, "label": frappe.get_cached_value("Patient", patient, "patient_name")}
+	return {
+		"value": patient,
+		"label": frappe.db.get_value("Patient", patient, "patient_name", ignore_permissions=True),
+	}
 
 
 @frappe.whitelist()
@@ -67,6 +72,7 @@ def get_departments():
 		filters={"show_in_portal": 1},
 		fields=["name", "department", "portal_image"],
 		order_by="name ASC",
+		ignore_permissions=True,
 	)
 
 
@@ -76,6 +82,7 @@ def get_practitioners(department):
 		"Healthcare Practitioner",
 		filters={"department": department, "show_in_portal": 1},
 		fields=["name", "practitioner_name", "designation", "department", "image"],
+		ignore_permissions=True,
 	)
 
 
@@ -85,12 +92,13 @@ def get_patients():
 		"Patient",
 		filters={"status": "Active", "name": ["in", get_patients_with_relations()]},
 		fields=["name as value", "patient_name as label"],
+		ignore_permissions=True,
 	)
 
 
 @frappe.whitelist()
 def get_settings():
-	return frappe.get_single("Healthcare Settings")
+	return frappe.get_doc("Healthcare Settings", "Healthcare Settings", ignore_permissions=True)
 
 
 @frappe.whitelist()
@@ -105,7 +113,7 @@ def get_slots(practitioner, date):
 	if date < current_date:
 		return {"status": "error", "message": "Cannot fetch slots for past dates."}
 
-	practitioner_doc = frappe.get_doc("Healthcare Practitioner", practitioner)
+	practitioner_doc = frappe.get_doc("Healthcare Practitioner", practitioner, ignore_permissions=True)
 	curr_bookings = frappe.db.get_all(
 		"Patient Appointment",
 		filters={"practitioner": practitioner_doc.name, "appointment_date": date},
@@ -142,6 +150,9 @@ def get_slots(practitioner, date):
 
 @frappe.whitelist()
 def make_appointment(practitioner, patient, date, slot):
+	if not (practitioner and patient and date and slot):
+		frappe.throw(_("Missing mandatory information to book appointment"))
+
 	doc = frappe.new_doc("Patient Appointment")
 	doc.appointment_type = frappe.db.get_single_value(
 		"Healthcare Settings", "default_appointment_type"
@@ -149,40 +160,36 @@ def make_appointment(practitioner, patient, date, slot):
 	doc.appointment_for = frappe.db.get_value(
 		"Appointment Type", doc.appointment_type, "allow_booking_for"
 	)
+
 	company = frappe.defaults.get_user_default("company")
 	if not company:
 		company = frappe.db.get_single_value("Global Defaults", "default_company")
 	doc.company = company
 
 	doc.patient = patient
-	practitioner = frappe.get_doc("Healthcare Practitioner", practitioner)
-	doc.practitioner = practitioner.name
-	doc.practitioner_name = practitioner.practitioner_name
-	doc.department = practitioner.department
+	practitioner_doc = frappe.get_doc("Healthcare Practitioner", practitioner)
+	doc.practitioner = practitioner_doc.name
+	doc.practitioner_name = practitioner_doc.practitioner_name
+	doc.department = practitioner_doc.department
 	doc.appointment_date = getdate(date)
 	doc.appointment_time = slot
 
 	weekday = getdate(date).strftime("%A")
+	service_unit = None
 
-	for schedule_entry in practitioner.practitioner_schedules:
-		# validate_practitioner_schedules(schedule_entry, practitioner)
+	for schedule_entry in practitioner_doc.practitioner_schedules:
 		practitioner_schedule = frappe.get_doc("Practitioner Schedule", schedule_entry.schedule)
-		service_unit = frappe.db.get_value(
-			"Healthcare Service Unit", schedule_entry.service_unit, "name"
-		)
 
 		if practitioner_schedule and not practitioner_schedule.disabled:
 			available_slots = []
 			for time_slot in practitioner_schedule.time_slots:
 				if weekday == time_slot.day:
-					# convert timedelta object to datetime object using a fixed base
-					time = datetime.min + time_slot.from_time
-					# extracting just the time out of the datetime object
-					time = time.time()
-					available_slots.append(time.strftime("%H:%M"))
+					time_dt = datetime.min + time_slot.from_time
+					available_slots.append(time_dt.time().strftime("%H:%M"))
 
-		if frappe.form_dict.get("slot") in available_slots:
-			break
+			if slot in available_slots:
+				service_unit = schedule_entry.service_unit
+				break
 
 	doc.service_unit = service_unit
 
@@ -196,20 +203,32 @@ def make_appointment(practitioner, patient, date, slot):
 
 @frappe.whitelist()
 def get_fees(practitioner=None, date=None):
-	if not (practitioner or date):
+	if not practitioner:
 		return
 
-	default_currency = erpnext.get_default_currency()
-	default_company = frappe.db.get_single_value("Global Defaults", "default_company")
+	company = frappe.defaults.get_user_default("company") or frappe.db.get_single_value(
+		"Global Defaults", "default_company"
+	)
+	default_currency = (
+		frappe.db.get_value("Company", company, "default_currency", ignore_permissions=True)
+		if company
+		else None
+	) or frappe.db.get_default("currency")
+
+	default_company = company
 
 	doc = frappe._dict(
 		{
-			"department": frappe.get_cached_value("Healthcare Practitioner", practitioner, "department"),
+			"department": frappe.db.get_value(
+				"Healthcare Practitioner", practitioner, "department", ignore_permissions=True
+			),
 			"service_unit": "",
 			"doctype": "Patient Appointment",
 			"inpatient_record": "",
 			"practitioner": practitioner,
-			"appointment_type": frappe.get_single_value("Healthcare Settings", "default_appointment_type"),
+			"appointment_type": frappe.db.get_single_value(
+				"Healthcare Settings", "default_appointment_type"
+			),
 		}
 	)
 
@@ -251,9 +270,12 @@ def get_patients_with_relations():
 	if frappe.session.user != "Administrator":
 		filters["user_id"] = frappe.session.user
 
-	patients = frappe.db.get_all("Patient", filters=filters, pluck="name")
+	patients = frappe.db.get_all("Patient", filters=filters, pluck="name", ignore_permissions=True)
 	relation = frappe.db.get_all(
-		"Patient Relation", filters={"parent": ["in", patients]}, pluck="patient"
+		"Patient Relation",
+		filters={"parent": ["in", patients]},
+		pluck="patient",
+		ignore_permissions=True,
 	)
 
 	return patients + relation
