@@ -5,8 +5,6 @@ import frappe
 from frappe.query_builder import Order
 from frappe.utils import get_datetime, get_time, getdate
 
-import erpnext
-
 from healthcare.healthcare.doctype.observation.observation import get_observation_reference
 from healthcare.healthcare.utils import get_appointment_billing_item_and_rate
 
@@ -52,17 +50,17 @@ def get_appointments():
 
 @frappe.whitelist()
 def get_logged_in_patient():
-	patient = frappe.db.exists(
-		"Patient", {"status": "Active", "user_id": frappe.session.user}, ignore_permissions=True
+	patient = frappe.db.get_value(
+		"Patient",
+		{"status": "Active", "user_id": frappe.session.user},
+		"name",
 	)
 
 	if not patient:
 		return None
 
-	return {
-		"value": patient,
-		"label": frappe.db.get_value("Patient", patient, "patient_name", ignore_permissions=True),
-	}
+	patient_name = frappe.db.get_value("Patient", patient, "patient_name")
+	return {"value": patient, "label": patient_name}
 
 
 @frappe.whitelist()
@@ -98,7 +96,20 @@ def get_patients():
 
 @frappe.whitelist()
 def get_settings():
-	return frappe.get_doc("Healthcare Settings", "Healthcare Settings", ignore_permissions=True)
+	settings_fields = [
+		"collect_payment",
+		"show_payment_popup",
+		"collect_registration_fee",
+		"default_appointment_type",
+		"enable_free_follow_ups",
+	]
+	settings = {}
+	for field in settings_fields:
+		settings[field] = frappe.db.get_single_value("Healthcare Settings", field)
+
+	# Check if Diagnostic Report doctype exists to show diagnostics tab
+	settings["show_diagnostics_tab"] = bool(frappe.db.exists("DocType", "Diagnostic Report"))
+	return settings
 
 
 @frappe.whitelist()
@@ -151,15 +162,23 @@ def get_slots(practitioner, date):
 @frappe.whitelist()
 def make_appointment(practitioner, patient, date, slot):
 	if not (practitioner and patient and date and slot):
-		frappe.throw(_("Missing mandatory information to book appointment"))
+		frappe.throw("Missing mandatory information to book appointment")
 
 	doc = frappe.new_doc("Patient Appointment")
 	doc.appointment_type = frappe.db.get_single_value(
 		"Healthcare Settings", "default_appointment_type"
 	)
-	doc.appointment_for = frappe.db.get_value(
-		"Appointment Type", doc.appointment_type, "allow_booking_for"
-	)
+
+	# allow_booking_for may not exist in v15 Appointment Type
+	if doc.appointment_type:
+		try:
+			doc.appointment_for = frappe.db.get_value(
+				"Appointment Type", doc.appointment_type, "allow_booking_for"
+			)
+		except Exception:
+			doc.appointment_for = "Practitioner"
+	else:
+		doc.appointment_for = "Practitioner"
 
 	company = frappe.defaults.get_user_default("company")
 	if not company:
@@ -193,9 +212,15 @@ def make_appointment(practitioner, patient, date, slot):
 
 	doc.service_unit = service_unit
 
-	practitioner_service = get_appointment_billing_item_and_rate(doc)
-	doc.billing_item = practitioner_service["service_item"]
-	doc.paid_amount = practitioner_service["practitioner_charge"]
+	try:
+		practitioner_service = get_appointment_billing_item_and_rate(doc)
+		doc.billing_item = practitioner_service.get("service_item")
+		doc.paid_amount = practitioner_service.get("practitioner_charge") or 0
+	except Exception:
+		# billing items not configured — allow appointment without billing
+		doc.billing_item = None
+		doc.paid_amount = 0
+
 	doc.insert(ignore_permissions=True)
 
 	return doc
@@ -209,18 +234,19 @@ def get_fees(practitioner=None, date=None):
 	company = frappe.defaults.get_user_default("company") or frappe.db.get_single_value(
 		"Global Defaults", "default_company"
 	)
-	default_currency = (
-		frappe.db.get_value("Company", company, "default_currency", ignore_permissions=True)
-		if company
-		else None
-	) or frappe.db.get_default("currency")
+
+	default_currency = None
+	if company:
+		default_currency = frappe.db.get_value("Company", company, "default_currency")
+	if not default_currency:
+		default_currency = frappe.db.get_default("currency") or "INR"
 
 	default_company = company
 
 	doc = frappe._dict(
 		{
 			"department": frappe.db.get_value(
-				"Healthcare Practitioner", practitioner, "department", ignore_permissions=True
+				"Healthcare Practitioner", practitioner, "department"
 			),
 			"service_unit": "",
 			"doctype": "Patient Appointment",
@@ -232,7 +258,11 @@ def get_fees(practitioner=None, date=None):
 		}
 	)
 
-	details = get_appointment_billing_item_and_rate(doc)
+	try:
+		details = get_appointment_billing_item_and_rate(doc)
+	except Exception:
+		# billing items not configured for this practitioner — return zero charge
+		details = {"service_item": None, "practitioner_charge": 0}
 
 	return {
 		"details": details,
