@@ -46,6 +46,15 @@ frappe.ui.form.on('Therapy Session', {
 			frm.trigger('filter_therapy_types');
 		}
 
+		frm.set_query("insurance_policy", function () {
+			return {
+				filters: {
+					patient: frm.doc.patient,
+					docstatus: 1,
+				},
+			};
+		});
+
 		frm.set_query("code_value", "codification_table", function(doc, cdt, cdn) {
 			let row = frappe.get_doc(cdt, cdn);
 			if (row.code_system) {

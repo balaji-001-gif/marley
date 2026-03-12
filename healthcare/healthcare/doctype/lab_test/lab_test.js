@@ -38,6 +38,15 @@ frappe.ui.form.on('Lab Test', {
 	refresh: function (frm) {
 		refresh_field('normal_test_items');
 		refresh_field('descriptive_test_items');
+
+		frm.set_query("insurance_policy", function () {
+			return {
+				filters: {
+					patient: frm.doc.patient,
+					docstatus: 1,
+				},
+			};
+		});
 		if (frm.doc.__islocal) {
 			frm.add_custom_button(__('Get from Patient Encounter'), function () {
 				get_lab_test_prescribed(frm);

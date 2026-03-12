@@ -154,6 +154,15 @@ frappe.ui.form.on('Patient Encounter', {
 			};
 		});
 
+		frm.set_query("insurance_policy", function () {
+			return {
+				filters: {
+					patient: frm.doc.patient,
+					docstatus: 1,
+				},
+			};
+		});
+
 		frm.set_query("code_value", "codification_table", function(doc, cdt, cdn) {
 			let row = frappe.get_doc(cdt, cdn);
 			if (row.code_system) {
@@ -227,7 +236,9 @@ frappe.ui.form.on('Patient Encounter', {
 						'type': data.message.appointment_type,
 						'practitioner': data.message.practitioner,
 						'invoiced': data.message.invoiced,
-						'company': data.message.company
+						'company': data.message.company,
+						'insurance_policy': data.message.insurance_policy,
+						'insurance_coverage': data.message.insurance_coverage,
 					};
 					frm.set_value(values);
 					frm.set_df_property('patient', 'read_only', 1);

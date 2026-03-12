@@ -588,6 +588,16 @@
    "group": "Others",
    "link_doctype": "Fee Validity",
    "link_fieldname": "patient"
+  },
+  {
+   "group": "Insurance",
+   "link_doctype": "Patient Insurance Policy",
+   "link_fieldname": "patient"
+  },
+  {
+   "group": "Insurance",
+   "link_doctype": "Patient Insurance Coverage",
+   "link_fieldname": "patient"
   }
  ],
  "max_attachments": 50,

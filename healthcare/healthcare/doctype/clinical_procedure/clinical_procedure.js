@@ -41,6 +41,15 @@ frappe.ui.form.on('Clinical Procedure', {
 			};
 		});
 
+		frm.set_query("insurance_policy", function () {
+			return {
+				filters: {
+					patient: frm.doc.patient,
+					docstatus: 1,
+				},
+			};
+		});
+
 		frm.set_query('appointment', function () {
 			return {
 				filters: {

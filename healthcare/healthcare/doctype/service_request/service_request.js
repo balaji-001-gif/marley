@@ -27,6 +27,15 @@ frappe.ui.form.on('Service Request', {
 			};
 		});
 
+		frm.set_query("insurance_policy", function () {
+			return {
+				filters: {
+					patient: frm.doc.patient,
+					docstatus: 1,
+				},
+			};
+		});
+
 		frm.trigger('setup_create_buttons');
 	},
 
