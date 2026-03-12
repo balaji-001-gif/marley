@@ -414,7 +414,6 @@ function fetchSlots(date) {
 }
 
 function get_fees(pract, date) {
-	error.value = null;
 	let get_fee_for_pract = createResource({
 		url: "/api/method/healthcare.healthcare.api.patient_portal.get_fees",
 		method: "GET",
@@ -432,7 +431,9 @@ function get_fees(pract, date) {
 			}
 		},
 		onError(e) {
-			error.value = e.messages?.[0] || e;
+			// Fee lookup is non-critical — don't block the booking flow
+			console.warn("Could not fetch fees:", e);
+			consultationFee.value = 0;
 		}
 	});
 	get_fee_for_pract.fetch();
