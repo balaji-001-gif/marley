@@ -1,10 +1,5 @@
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
-
-from healthcare.regional.india.abdm.setup import setup as abdm_setup
 from healthcare.setup import data
-
 
 def execute():
 	create_custom_fields(data.get("custom_fields"))
-
-	abdm_setup()
