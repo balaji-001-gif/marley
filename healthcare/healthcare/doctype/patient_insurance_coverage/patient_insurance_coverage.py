@@ -7,7 +7,7 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import flt, get_link_to_form, getdate
 
-from erpnext.stock.get_item_details import ItemDetailsCtx, get_item_details
+from erpnext.stock.get_item_details import get_item_details
 
 from healthcare.healthcare.doctype.insurance_payor.insurance_payor import has_active_contract
 from healthcare.healthcare.doctype.item_insurance_eligibility.item_insurance_eligibility import (
@@ -336,18 +336,16 @@ def make_insurance_coverage(
 
 
 def get_item_price_list_rate(item_code, price_list, qty, company):
-	ctx: ItemDetailsCtx = ItemDetailsCtx(
-		{
-			"doctype": "Sales Invoice",
-			"item_code": item_code,
-			"qty": qty,
-			"selling_price_list": price_list,
-			"company": company,
-			"plc_conversion_rate": 1.0,
-			"conversion_rate": 1.0,
-		}
-	)
-	item_details = get_item_details(ctx)
+	args = {
+		"doctype": "Sales Invoice",
+		"item_code": item_code,
+		"qty": qty,
+		"selling_price_list": price_list,
+		"company": company,
+		"plc_conversion_rate": 1.0,
+		"conversion_rate": 1.0,
+	}
+	item_details = get_item_details(args)
 
 	return item_details.price_list_rate
 
