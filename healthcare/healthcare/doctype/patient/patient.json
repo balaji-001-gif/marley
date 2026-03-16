@@ -30,6 +30,7 @@
   "mobile",
   "phone",
   "email",
+  "country",
   "invite_user",
   "user_id",
   "customer_details_section",
@@ -210,6 +211,12 @@
    "label": "Email",
    "no_copy": 1,
    "options": "Email"
+  },
+  {
+   "fieldname": "country",
+   "fieldtype": "Link",
+   "label": "Country",
+   "options": "Country"
   },
   {
    "fieldname": "phone",

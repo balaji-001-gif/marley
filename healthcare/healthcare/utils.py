@@ -438,7 +438,8 @@ def get_clinical_procedures_to_invoice(patient, company):
 
 	return clinical_procedures_to_invoice
 
-
+def get_inpatient_services_to_invoice(patient, company):
+	services_to_invoice = []
 	if not frappe.db.get_single_value("Healthcare Settings", "automatically_generate_billable"):
 		ip_record = DocType("Inpatient Record")
 		ip_occupancy = DocType("Inpatient Occupancy")
