@@ -142,6 +142,7 @@ def get_inpatient_services_to_invoice(patient, company):
 	return services_to_invoice
 
 
+@frappe.whitelist()
 def get_healthcare_services_to_invoice(patient, customer, company, link_customer=False):
 	patient = frappe.get_doc("Patient", patient)
 	items_to_invoice = []
