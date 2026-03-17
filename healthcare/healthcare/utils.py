@@ -31,7 +31,117 @@ from healthcare.healthcare.doctype.fee_validity.fee_validity import (
 from healthcare.setup import setup_healthcare
 
 
-@frappe.whitelist()
+
+def get_inpatient_services_to_invoice(patient, company):
+	services_to_invoice = []
+	if not frappe.db.get_single_value("Healthcare Settings", "automatically_generate_billable"):
+		ip_record = DocType("Inpatient Record")
+		ip_occupancy = DocType("Inpatient Occupancy")
+
+		inpatient_services = (
+			frappe.qb.from_(ip_occupancy)
+			.join(ip_record)
+			.on(ip_occupancy.parent == ip_record.name)
+			.select(ip_occupancy.star)
+			.where(
+				(ip_record.patient == patient.name)
+				& (ip_record.company == company)
+				& (ip_occupancy.invoiced == 0)
+			)
+			.run(as_dict=True)
+		)
+
+		for inpatient_occupancy in inpatient_services:
+			service_unit_type = frappe.db.get_value(
+				"Healthcare Service Unit", inpatient_occupancy.service_unit, "service_unit_type"
+			)
+			service_unit_type = frappe.get_cached_doc("Healthcare Service Unit Type", service_unit_type)
+			if service_unit_type and service_unit_type.is_billable:
+				coverage_details = None
+				if inpatient_occupancy.insurance_coverage:
+					coverage_details = frappe.get_cached_value(
+						"Patient Insurance Coverage",
+						inpatient_occupancy.insurance_coverage,
+						[
+							"status",
+							"coverage",
+							"discount",
+							"price_list_rate",
+							"item_code",
+							"qty",
+							"policy_number",
+							"coverage_validity_end_date",
+							"company",
+							"insurance_payor",
+						],
+						as_dict=True,
+					)
+
+				if (
+					coverage_details
+					and coverage_details.status in ["Approved", "Partly Invoiced"]
+					and getdate() <= coverage_details.coverage_validity_end_date
+					and company == coverage_details.company
+				):
+					services_to_invoice.append(
+						{
+							"reference_type": "Inpatient Occupancy",
+							"reference_name": inpatient_occupancy.name,
+							"insurance_coverage": inpatient_occupancy.insurance_coverage,
+							"patient_insurance_policy": coverage_details.policy_number,
+							"insurance_payor": coverage_details.insurance_payor,
+							"service": coverage_details.item_code,
+							"rate": coverage_details.price_list_rate,
+							"coverage_percentage": coverage_details.coverage,
+							"discount_percentage": coverage_details.discount,
+							"coverage_rate": coverage_details.price_list_rate,
+							"coverage_qty": coverage_details.qty,
+							"qty": coverage_details.qty,
+						}
+					)
+				else:
+					hours_occupied = flt(
+						time_diff_in_hours(inpatient_occupancy.check_out, inpatient_occupancy.check_in)
+					)
+					qty = 0.5
+					if hours_occupied > 0:
+						qty = hours_occupied / service_unit_type.no_of_hours
+					services_to_invoice.append(
+						{
+							"reference_type": "Inpatient Occupancy",
+							"reference_name": inpatient_occupancy.name,
+							"service": service_unit_type.item,
+							"qty": qty,
+						}
+					)
+
+	else:
+		ip = frappe.qb.DocType("Inpatient Record")
+		iri = frappe.qb.DocType("Inpatient Record Item")
+
+		query = (
+			frappe.qb.from_(iri)
+			.select(iri.name, iri.item_code, iri.quantity)
+			.join(ip)
+			.on(iri.parent == ip.name)
+			.where((ip.patient == patient.name) & (ip.company == company) & (iri.invoiced == 0))
+		)
+
+		inpatient_services = query.run(as_dict=True)
+
+		for inpatient_occupancy in inpatient_services:
+			services_to_invoice.append(
+				{
+					"reference_type": "Inpatient Record Item",
+					"reference_name": inpatient_occupancy.name,
+					"service": inpatient_occupancy.item_code,
+					"qty": inpatient_occupancy.quantity,
+				}
+			)
+
+	return services_to_invoice
+
+
 def get_healthcare_services_to_invoice(patient, customer, company, link_customer=False):
 	patient = frappe.get_doc("Patient", patient)
 	items_to_invoice = []
@@ -438,114 +548,7 @@ def get_clinical_procedures_to_invoice(patient, company):
 
 	return clinical_procedures_to_invoice
 
-def get_inpatient_services_to_invoice(patient, company):
-	services_to_invoice = []
-	if not frappe.db.get_single_value("Healthcare Settings", "automatically_generate_billable"):
-		ip_record = DocType("Inpatient Record")
-		ip_occupancy = DocType("Inpatient Occupancy")
 
-		inpatient_services = (
-			frappe.qb.from_(ip_occupancy)
-			.join(ip_record)
-			.on(ip_occupancy.parent == ip_record.name)
-			.select(ip_occupancy.star)
-			.where(
-				(ip_record.patient == patient.name)
-				& (ip_record.company == company)
-				& (ip_occupancy.invoiced == 0)
-			)
-			.run(as_dict=True)
-		)
-
-		for inpatient_occupancy in inpatient_services:
-			service_unit_type = frappe.db.get_value(
-				"Healthcare Service Unit", inpatient_occupancy.service_unit, "service_unit_type"
-			)
-			service_unit_type = frappe.get_cached_doc("Healthcare Service Unit Type", service_unit_type)
-			if service_unit_type and service_unit_type.is_billable:
-				coverage_details = None
-				if inpatient_occupancy.insurance_coverage:
-					coverage_details = frappe.get_cached_value(
-						"Patient Insurance Coverage",
-						inpatient_occupancy.insurance_coverage,
-						[
-							"status",
-							"coverage",
-							"discount",
-							"price_list_rate",
-							"item_code",
-							"qty",
-							"policy_number",
-							"coverage_validity_end_date",
-							"company",
-							"insurance_payor",
-						],
-						as_dict=True,
-					)
-
-				if (
-					coverage_details
-					and coverage_details.status in ["Approved", "Partly Invoiced"]
-					and getdate() <= coverage_details.coverage_validity_end_date
-					and company == coverage_details.company
-				):
-					services_to_invoice.append(
-						{
-							"reference_type": "Inpatient Occupancy",
-							"reference_name": inpatient_occupancy.name,
-							"insurance_coverage": inpatient_occupancy.insurance_coverage,
-							"patient_insurance_policy": coverage_details.policy_number,
-							"insurance_payor": coverage_details.insurance_payor,
-							"service": coverage_details.item_code,
-							"rate": coverage_details.price_list_rate,
-							"coverage_percentage": coverage_details.coverage,
-							"discount_percentage": coverage_details.discount,
-							"coverage_rate": coverage_details.price_list_rate,
-							"coverage_qty": coverage_details.qty,
-							"qty": coverage_details.qty,
-						}
-					)
-				else:
-					hours_occupied = flt(
-						time_diff_in_hours(inpatient_occupancy.check_out, inpatient_occupancy.check_in)
-					)
-					qty = 0.5
-					if hours_occupied > 0:
-						qty = hours_occupied / service_unit_type.no_of_hours
-					services_to_invoice.append(
-						{
-							"reference_type": "Inpatient Occupancy",
-							"reference_name": inpatient_occupancy.name,
-							"service": service_unit_type.item,
-							"qty": qty,
-						}
-					)
-
-	else:
-		ip = frappe.qb.DocType("Inpatient Record")
-		iri = frappe.qb.DocType("Inpatient Record Item")
-
-		query = (
-			frappe.qb.from_(iri)
-			.select(iri.name, iri.item_code, iri.quantity)
-			.join(ip)
-			.on(iri.parent == ip.name)
-			.where((ip.patient == patient.name) & (ip.company == company) & (iri.invoiced == 0))
-		)
-
-		inpatient_services = query.run(as_dict=True)
-
-		for inpatient_occupancy in inpatient_services:
-			services_to_invoice.append(
-				{
-					"reference_type": "Inpatient Record Item",
-					"reference_name": inpatient_occupancy.name,
-					"service": inpatient_occupancy.item_code,
-					"qty": inpatient_occupancy.quantity,
-				}
-			)
-
-	return services_to_invoice
 
 
 def get_therapy_plans_to_invoice(patient, company):
