@@ -1788,3 +1788,49 @@ def add_node():
 		args.parent_healthcare_service_unit = None
 
 	frappe.get_doc(args).insert()
+
+
+@frappe.whitelist()
+def fix_diagnostic_report_links():
+	print("Checking for stale Page entry 'diagnostic-report'...")
+	# Some older versions might have had a Page instead of a DocType
+	if frappe.db.exists("Page", "diagnostic-report"):
+		print("Found stale Page 'diagnostic-report'. Removing it...")
+		frappe.delete_doc("Page", "diagnostic-report")
+
+	print("Checking Workspace Links for incorrect 'diagnostic-report' Page links...")
+	# Find all workspace links that point to 'diagnostic-report' as a Page
+	links = frappe.get_all(
+		"Workspace Link",
+		filters={"link_to": "diagnostic-report", "link_type": "Page"},
+		fields=["name", "parent"],
+	)
+
+	if not links:
+		print("No broken Workspace Links found in child tables.")
+	else:
+		for link in links:
+			print(f"Fixing link in Workspace {link.parent}...")
+			frappe.db.set_value(
+				"Workspace Link", link.name, {"link_type": "DocType", "link_to": "Diagnostic Report"}
+			)
+			print(f"Link {link.name} updated to DocType 'Diagnostic Report'.")
+
+	# Also check shortcuts
+	shortcuts = frappe.get_all(
+		"Workspace Shortcut",
+		filters={"link_to": "diagnostic-report", "type": "Page"},
+		fields=["name", "parent"],
+	)
+
+	if not shortcuts:
+		print("No broken Workspace Shortcuts found.")
+	else:
+		for shortcut in shortcuts:
+			print(f"Fixing shortcut {shortcut.name} in Workspace {shortcut.parent}...")
+			frappe.db.set_value(
+				"Workspace Shortcut", shortcut.name, {"type": "DocType", "link_to": "Diagnostic Report"}
+			)
+
+	frappe.db.commit()
+	print("Done.")
