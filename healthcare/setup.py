@@ -553,7 +553,12 @@ data = {
 
 
 def setup_healthcare():
+	if frappe.flags.in_setup_healthcare:
+		return
+	frappe.flags.in_setup_healthcare = True
+
 	if frappe.db.exists("Medical Department", "Cardiology"):
+		frappe.flags.in_setup_healthcare = False
 		# already setup
 		return
 
@@ -567,6 +572,7 @@ def setup_healthcare():
 	create_default_root_service_units()
 
 	frappe.clear_cache()
+	frappe.flags.in_setup_healthcare = False
 
 
 def setup_domain():
