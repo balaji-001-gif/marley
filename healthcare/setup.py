@@ -519,14 +519,6 @@ data = {
 				"options": "Patient Insurance Policy",
 				"insert_after": "left",
 			},
-			{
-				"fieldname": "insurance_coverage",
-				"label": "Insurance Coverage",
-				"fieldtype": "Link",
-				"options": "Patient Insurance Coverage",
-				"insert_after": "insurance_policy",
-				"read_only": True,
-			},
 		],
 		"Medication Request": [
 			{
