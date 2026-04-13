@@ -1,11 +1,12 @@
 import frappe
-from frappe.utils import flt
+from frappe.utils import flt, getdate
 
 from erpnext.accounts.doctype.sales_invoice.sales_invoice import SalesInvoice
 
 
 class HealthcareSalesInvoice(SalesInvoice):
 	def validate(self):
+		self.set_missing_insurance_details()
 		super().validate()
 		self.calculate_patient_insurance_coverage()
 
@@ -111,3 +112,35 @@ class HealthcareSalesInvoice(SalesInvoice):
 			self.patient_payable_amount = self.outstanding_amount - self.total_insurance_coverage_amount
 		else:
 			self.patient_payable_amount = self.outstanding_amount
+
+	def set_missing_insurance_details(self):
+		for item in self.items:
+			if not item.insurance_coverage:
+				filters = {
+					"patient": self.patient,
+					"company": self.company,
+					"item_code": item.item_code,
+					"docstatus": 1,
+					"status": ["in", ["Approved", "Partly Invoiced"]],
+					"coverage_validity_end_date": [">=", getdate()],
+				}
+				if item.reference_dt and item.reference_dn:
+					filters["template_dt"] = item.reference_dt
+					filters["template_dn"] = item.reference_dn
+
+				coverage = frappe.db.get_value(
+					"Patient Insurance Coverage",
+					filters,
+					["name", "coverage", "discount", "price_list_rate", "policy_number", "qty"],
+					as_dict=True,
+				)
+				if coverage:
+					item.insurance_coverage = coverage.name
+					item.coverage_percentage = coverage.coverage
+					item.discount_percentage = coverage.discount
+					item.coverage_rate = coverage.price_list_rate
+					item.coverage_qty = coverage.qty
+					item.patient_insurance_policy = coverage.policy_number
+
+					if not item.rate:
+						item.rate = coverage.price_list_rate
