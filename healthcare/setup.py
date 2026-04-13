@@ -565,14 +565,14 @@ def setup_healthcare():
 		# already setup
 		return
 
+	setup_domain()
+
 	from healthcare.regional.india.abdm.setup import setup as abdm_setup
 
 	abdm_setup()
 
 	create_custom_records()
 	create_default_root_service_units()
-
-	setup_domain()
 
 	frappe.clear_cache()
 
